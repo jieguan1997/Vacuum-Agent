@@ -1,0 +1,256 @@
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+using MLAgents;
+
+public class BodyAgent2:Agent
+{
+
+    Vector3 BodyDisToTarget;
+    Vector3 HandDisToTarget;
+    
+    
+    float BodyMovingTowardsDot;
+    float BodyFacingDot;
+    float HandMovingTowardsDot;
+    float HandFacingDot;
+    public float targetSpawnRadius;
+
+
+    public Transform target;
+    public Transform ground;
+
+    [Header("CarBody")]
+    public Transform body;
+    public Transform fl;
+    public Transform fr;
+    public Transform br;
+    public Transform bl;
+    public Transform aone;
+    public Transform atwo;
+    public Transform hand;
+
+    int currentDecisionStep;
+    bool isNewDecisionStep;
+
+
+    JointDriveController jdController;
+
+    void Awake()
+    {
+        jdController = GetComponent<JointDriveController>();
+        currentDecisionStep = 1;
+
+        jdController.SetupBodyPart(body);
+        jdController.SetupBodyPart(fl);
+        jdController.SetupBodyPart(fr);
+        jdController.SetupBodyPart(bl);
+        jdController.SetupBodyPart(br);
+        jdController.SetupBodyPart(aone);
+        jdController.SetupBodyPart(atwo);
+        jdController.SetupBodyPart(hand);
+    
+
+
+
+    }
+
+
+   
+
+
+
+    
+    public override void CollectObservations()
+    {
+        jdController.GetCurrentJointForces();
+        
+        AddVectorObs(hand.localPosition);
+        AddVectorObs(body.localPosition);
+        AddVectorObs(BodyDisToTarget.normalized);
+        AddVectorObs(HandDisToTarget.normalized);
+      
+
+
+        AddVectorObs(target.position);
+
+
+        AddVectorObs(body.forward);
+        AddVectorObs(body.up);
+
+        AddVectorObs(hand.forward);
+        AddVectorObs(hand.up);
+;
+     
+
+
+        
+
+        AddVectorObs(jdController.bodyPartsDict[hand].rb.velocity);
+        AddVectorObs(jdController.bodyPartsDict[hand].rb.angularVelocity);
+
+        AddVectorObs(jdController.bodyPartsDict[body].rb.velocity);
+        AddVectorObs(jdController.bodyPartsDict[body].rb.angularVelocity);
+
+
+
+
+
+
+
+
+    }
+
+
+
+    public void TouchedTarget()
+    {
+        AddReward(1f);
+        
+        
+            GetRandomTargetPos();
+        
+    }
+
+    /// <summary>
+    /// Moves target to a random position within specified radius.
+    /// </summary>
+    public void GetRandomTargetPos()
+    {
+        target.position = new Vector3(Random.Range(-13f, 13f), 0.47f, Random.Range(-13f, 13f));
+    }
+
+    public override void AgentAction(float[] vectorAction, string textAction)
+    {
+
+
+
+
+
+
+
+
+        var bpDict = jdController.bodyPartsDict;
+        bpDict[fl].SetJointTargetRotation(vectorAction[0], vectorAction[1], 0);
+        bpDict[fr].SetJointTargetRotation(vectorAction[2], vectorAction[3], 0);
+        bpDict[bl].SetJointTargetRotation(0, vectorAction[4], 0);
+        bpDict[br].SetJointTargetRotation(0, vectorAction[5], 0);
+
+        bpDict[aone].SetJointTargetRotation(vectorAction[6], vectorAction[7], 0);
+        bpDict[atwo].SetJointTargetRotation(vectorAction[8], vectorAction[9], 0);
+        bpDict[body].SetJointTargetRotation(vectorAction[10], vectorAction[11], 0);
+
+
+
+
+
+
+
+        bpDict[fl].SetJointStrength(vectorAction[12]);
+        bpDict[fr].SetJointStrength(vectorAction[13]);
+        bpDict[bl].SetJointStrength(vectorAction[14]);
+        bpDict[br].SetJointStrength(vectorAction[15]);
+
+        bpDict[aone].SetJointStrength(vectorAction[16]);
+        bpDict[atwo].SetJointStrength(vectorAction[17]);
+        bpDict[body].SetJointStrength(vectorAction[18]);
+
+
+
+
+
+        Vector3 controlSignal = Vector3.zero;
+        controlSignal.x = vectorAction[19];
+        controlSignal.z = vectorAction[20];
+
+
+
+
+        bpDict[body].rb.AddForce(controlSignal * 1000);
+
+
+        Vector3 handSignal = Vector3.zero;
+        handSignal.x = vectorAction[21];
+        handSignal.y = vectorAction[22];
+        handSignal.z = vectorAction[23];
+
+
+
+
+        bpDict[hand].rb.AddForce(controlSignal * 20);
+
+        bpDict[body].rb.AddTorque(transform.up * vectorAction[24] * 900);
+
+
+
+
+
+
+
+
+        //SetReward
+
+
+
+
+
+
+        //set hand
+
+
+
+        BodyDisToTarget = target.position - jdController.bodyPartsDict[body].rb.position;
+        HandDisToTarget = target.position - jdController.bodyPartsDict[hand].rb.position;
+
+        BodyMovingTowardsDot = Vector3.Dot(jdController.bodyPartsDict[body].rb.velocity, BodyDisToTarget.normalized);
+        AddReward(0.02f * BodyMovingTowardsDot);
+
+
+        BodyFacingDot = Vector3.Dot(BodyDisToTarget.normalized, body.forward);
+        AddReward(0.01f * BodyFacingDot);
+
+
+
+        HandMovingTowardsDot = Vector3.Dot(jdController.bodyPartsDict[hand].rb.velocity, HandDisToTarget.normalized);
+        AddReward(0.2f * HandMovingTowardsDot);
+
+
+        HandFacingDot = Vector3.Dot(HandDisToTarget.normalized, hand.forward);
+        AddReward(0.1f * HandFacingDot);
+        //SetReward
+
+        float DistansTotarget = Vector3.Distance(target.position, jdController.bodyPartsDict[hand].rb.position);
+            if (DistansTotarget <2f || target.transform.position.y< 0f)
+            {
+                TouchedTarget();
+          //Done();
+            }
+        
+
+
+
+        RewardFunctionTimePenalty();
+
+    }
+
+
+  public override void AgentReset()
+    {
+        
+
+        foreach (var handPart in jdController.bodyPartsDict.Values)
+        {
+            handPart.Reset(handPart);
+        }
+
+        isNewDecisionStep = true;
+        currentDecisionStep = 1;
+    }
+
+
+
+    void RewardFunctionTimePenalty()
+    {
+        AddReward(-0.001f);
+    }
+}
